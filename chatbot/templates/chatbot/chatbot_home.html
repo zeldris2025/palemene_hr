@@ -1,0 +1,252 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Palemene HR Assistant</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+            align-items: center;
+            vertical-align: middle;
+            
+        }
+        .center-container {
+            text-align: center; /* Centers text and inline elements */
+            margin-top: 20px;
+        }
+
+        .center-container img {
+            max-width: 100px; /* Adjust size of the logo */
+            height: 100px;
+        }
+
+        .center-container h2 {
+            margin-top: 5px; /* Space between logo and text */
+            color: rgb(104, 104, 104)
+        }
+
+        .chat-container {
+            
+            width: 100%;
+            max-width: 600px;
+            margin: 20px auto;
+            padding: 10px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            align-items: center;
+            vertical-align: middle;
+        }
+        .chat-box {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            height: 600px;
+            overflow-y: auto;
+            padding: 10px;
+            border: 1px solid #ddd;
+            background-color: #f9f9f9;
+            margin-bottom: 10px;
+            border-radius: 8px;
+        }
+        .user-message, .bot-message {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 10px;
+            width: max-content;
+            color: white;
+        }
+        .user-message {
+            align-self: flex-end;
+            text-align: right;
+            background-color: rgb(146, 146, 146);
+            
+           
+        }
+        .bot-message {
+            background-color: rgb(185, 66, 66);
+            align-self: flex-start;
+            text-align: left;
+
+        }
+        .input-box {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            
+        }
+        #employee-id {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+            text-align: center;
+
+        }
+        .response-buttons {
+            margin-top: 10px; 
+        }
+        .response-buttons button {
+            
+            padding: 8px 12px;
+            margin: 5px;
+            background-color: #5cb85c;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .response-buttons button:hover {
+            background-color: #4cae4c;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="center-container">
+        <img src="{% static 'chatbot/logo.png' %}" alt="Logo">
+        <h2>Welcome to the Palemene HR-Bot</h2>
+    </div>
+<div class="chat-container">
+    <div class="chat-box" id="chat-box">
+        <div class="bot-message">Hello there! <br>Please enter your EmployeeID to begin.</div>
+    </div>
+
+    <div class="input-box">
+        <input type="text" id="employee-id" placeholder="Enter EmployeeID" onkeydown="checkEnter(event)">
+    </div>
+    <div id="response-container" class="response-buttons"></div>
+</div>
+
+<script>
+    // This function checks for Enter key press in the input field
+    function checkEnter(event) {
+        if (event.key === "Enter") {
+            submitEmployeeId();  // Call the function to handle employee search
+        }
+    }
+
+    function submitEmployeeId() {
+        const employeeId = document.getElementById('employee-id').value;
+
+        // Ensure the employee ID is not empty
+        if (!employeeId) {
+            alert("Please enter your Employee ID.");
+            return;
+        }
+
+        // Append the user's message to the chat window
+        appendMessage('user', employeeId);
+
+        // Send a POST request to the server
+        fetch('/chatbot/get_employee/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()  // Add CSRF token for security
+            },
+            body: JSON.stringify({ employee_id: employeeId })  // Send Employee ID in JSON
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                appendMessage('bot', data.error);
+            } else {
+                appendMessage('bot', data.greeting);
+                const options = data.options.map(option => 
+                    `<button onclick="handleOption('${option}')">${option}</button>`
+                ).join('');
+                document.getElementById('response-container').innerHTML = options;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            appendMessage('bot', "An error occurred. Please try again.");
+        });
+
+        // Clear the input field
+       // document.getElementById('employee-id').value = '';
+    }
+
+  // Function to handle option click (either See Leave Balance or Download Leave Form)
+function handleOption(option) {
+    const employeeId = document.getElementById('employee-id').value;
+
+    appendMessage('user', option);  // Append the user’s choice
+
+    if (option === 'See Leave Balance') {
+        
+    // Fetch the leave balance for the given employee
+    fetch(`/chatbot/leave_balance/${employeeId}/`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                appendMessage('bot', data.error);
+            } else {
+                let message = 'Leave Balance:<br>-----------------------<br>';
+                for (const [leaveType, balance] of Object.entries(data)) {
+                    message += `${leaveType}: ${balance}<br>`;
+                }
+                appendMessage('bot', message);  // Display the leave balances
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            appendMessage('bot', "An error occurred while fetching leave balance.");
+        });
+
+    } else if (option === 'Download Leave Form') {
+    fetch('/chatbot/download_leave_form/')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to fetch the leave form. Please try again.');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.form_url) {
+                window.location.href = data.form_url;  // Redirect to download the leave form
+            } else {
+                alert('Leave form URL is missing from the server response.');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while downloading the leave form. Please try again later.');
+        });
+}
+}
+
+    // Function to append messages to the chat window
+    function appendMessage(sender, message) {
+        const chatBox = document.getElementById('chat-box');
+        const messageDiv = document.createElement('div');
+        messageDiv.classList.add(sender + '-message');
+        messageDiv.innerHTML = message;
+        chatBox.appendChild(messageDiv);
+
+        // Scroll to the bottom of the chat
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+   // Helper function to get CSRF token from cookies (Django uses CSRF protection)
+function getCsrfToken() {
+    let csrfToken = null;
+    const cookies = document.cookie.split(';');
+    cookies.forEach(cookie => {
+        if (cookie.trim().startsWith('csrftoken=')) {
+            csrfToken = cookie.trim().split('=')[1];
+        }
+    });
+    return csrfToken;
+}
+</script>
+
+</body>
+</html>
